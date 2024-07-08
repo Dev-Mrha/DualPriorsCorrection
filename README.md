@@ -1,1 +1,1 @@
-# Combining-Generative-and-Geometry-Priors-for-Wide-Angle-Portrait-Correction
+# Combining Generative and Geometry Priors for Wide-Angle Portrait Correction
