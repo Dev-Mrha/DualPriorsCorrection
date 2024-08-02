@@ -1,0 +1,9 @@
+.idea/
+/##/.DS_Store
+./experiment/
+__pycache__/
+./data/
+*.pt
+*.pth
+*/__pycache__/
+/pretrained_models/*
