@@ -1,21 +1,14 @@
 import torch
-import torch.nn as nn
 import cv2
 import json
 from tqdm import tqdm
 import numpy as np
 from model.combineNet import Model
-from model.unet import U_Net_Line
 import os
-import torch.nn.functional as F
 from PIL import Image
 import torchvision.transforms as transforms
-from torchvision.utils import save_image
-import face_alignment
-import dlib
-import time
+import argparse
 
-# device = "cuda" if torch.cuda.is_available() else "cpu"
 device = 'cuda:0'
 eps = 1e-6
 
@@ -115,22 +108,16 @@ def compute_ori2shape_face_line_metric(model, oriimg_paths):
         # Get the landmarks from the [gt image]
         stereo_lmk_file = open(oriimg_path.replace(".jpg", "_stereo_landmark.json"))
         stereo_lmk = np.array(json.load(stereo_lmk_file), dtype="float32")
-
-        # Get the landmarks from the [source image]
-        ori_lmk_file = open(oriimg_path.replace(".jpg", "_landmark.json"))
-        ori_lmk = np.array(json.load(ori_lmk_file), dtype="float32")
-
-        out_lmk_file = open(oriimg_path.replace(".jpg", "_pred_mask_ldmk.json"))
+        # Get the landmarks from the [pred out]
+        out_lmk_file = open(oriimg_path.replace(".jpg", "_pred_landmark.json"))
         out_lmk = np.array(json.load(out_lmk_file), dtype="float32")
 
         stereo_lmk = sorted(stereo_lmk, key=lambda x: x[63][1])
         out_lmk = sorted(out_lmk, key=lambda x: x[63][1])
-        ori_lmk = sorted(ori_lmk, key=lambda x: x[63][1])
         stereo_lmk = np.array(stereo_lmk)
         out_lmk = np.array(out_lmk)
-        ori_lmk = np.array(ori_lmk)
-        # Compute the face metric
 
+        # Compute the face metric
         ori_width, ori_height = ori_img.size
         out_img, pred = get_img_flow(model, input)  # pred is flow_mid, only for lineAcc
         predflow_x, predflow_y = pred[:, :, 0], pred[:, :, 1]
@@ -174,11 +161,7 @@ def compute_ori2shape_face_line_metric(model, oriimg_paths):
         face_all_sum_pred.append(face_pred_sim)
         ldmk_loss_all.append(ldmk_loss)
         stereo_lmk_file.close()
-        ori_lmk_file.close()
 
-    print(face_all_sum_pred)
-    print(line_all_sum_pred)
-    print(ldmk_loss_all)
     return np.mean(line_all_sum_pred) * 100, np.mean(face_all_sum_pred) * 100, np.mean(ldmk_loss_all)
 
 
@@ -191,24 +174,33 @@ def generate_out(model, img_pths):
 
 
 if __name__ == '__main__':
+    argparse = argparse.ArgumentParser()
+    argparse.add_argument('--option', type=str, default='evaluate', help='generate or evaluate')
+    argparse.add_argument('--test-dir', type=str, default="../test/")
+    argparse.add_argument('--device', type=str, default='cuda:0')
+    argparse.add_argument('--e4e-path', type=str, default='./pretrained_models/linenet.pt')
+    argparse.add_argument('--linenet-path', type=str, default='./pretrained_models/e4e_best_model.pth')
+    argparse.add_argument('--facenet-path', type=str, default='./pretrained_models/facenet.pt')
+    args = argparse.parse_args()
+    device = args.device
+
     print('using device ', device)
     mdl = Model(device).to(device)
     print('loading ckpts ...')
-    mdl.load_ckpt('./pretrained_models/linenet.pt', './pretrained_models/e4e_best_model.pth', # linenet_1115_best
-                  './pretrained_models/facenet.pt') # facenet_lq_best_model  iteration_175
-    test_dir = "../test/"
+    mdl.load_ckpt(args.e4e_path, args.linenet_path, args.facenet_path)
+    test_dir = args.test_dir
     oriimg_paths = []
     for root, dirs, files in os.walk(test_dir):
         for file_name in files:
             if file_name.endswith(".jpg") or file_name.endswith(".png"):
-                if "line" not in file_name and "stereo" not in file_name and "pred" not in file_name and \
-                        "face" not in file_name and "mask" not in file_name and "ldmk" not in file_name and \
-                        "output" not in file_name and "semi" not in file_name:
+                if "line" not in file_name and "stereo" not in file_name and "landmark" not in file_name:
                     oriimg_paths.append(os.path.join(root, file_name))
     print("The number of images: :", len(oriimg_paths))
     oriimg_paths.sort()
-    print('test begin')
-    # print(oriimg_paths)
-    # line_score, face_score, ldmk_loss = compute_ori2shape_face_line_metric(mdl, oriimg_paths)
-    # print("Line_score = {:.4f}, Face_score = {:.4f}, ldmk_loss = {:.4f} ".format(line_score, face_score, ldmk_loss))
-    generate_out(mdl, oriimg_paths)
+    if args.option == 'generate':
+        print("Generate the output images")
+        generate_out(mdl, oriimg_paths)
+    if args.option == 'evaluate':
+        print("Evaluate the output images")
+        line_score, face_score, ldmk_loss = compute_ori2shape_face_line_metric(mdl, oriimg_paths)
+        print("Line_score = {:.4f}, Face_score = {:.4f}, ldmk_loss = {:.4f} ".format(line_score, face_score, ldmk_loss))
