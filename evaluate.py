@@ -8,6 +8,7 @@ import os
 from PIL import Image
 import torchvision.transforms as transforms
 import argparse
+from torchvision.utils import save_image
 
 device = 'cuda:0'
 eps = 1e-6
@@ -111,6 +112,7 @@ def compute_ori2shape_face_line_metric(model, oriimg_paths):
         # Get the landmarks from the [pred out]
         out_lmk_file = open(oriimg_path.replace(".jpg", "_pred_landmark.json"))
         out_lmk = np.array(json.load(out_lmk_file), dtype="float32")
+        # out_lmk = out_lmk / 0.75
 
         stereo_lmk = sorted(stereo_lmk, key=lambda x: x[63][1])
         out_lmk = sorted(out_lmk, key=lambda x: x[63][1])
@@ -169,8 +171,12 @@ def generate_out(model, img_pths):
     for oriimg_path in tqdm(img_pths):
         ori_img = Image.open(oriimg_path)  # Read the oriinal image
         input = ori_img.copy() 
-        out_img = get_img_flow(model, input, False)  # pred is flow_mid, only for lineAcc
-        cv2.imwrite(oriimg_path.replace(".jpg", "_pred.png"), out_img, [cv2.IMWRITE_JPEG_QUALITY, 90])
+        out_img, msk = get_img_flow(model, input, False)  # image and mask
+        out_img = cv2.cvtColor(out_img, cv2.COLOR_RGB2BGR)
+        out_img = cv2.resize(out_img, (0,0), fx=0.75, fy=0.75)
+        msk = cv2.resize(msk, (0,0), fx=0.75, fy=0.75)
+        cv2.imwrite(oriimg_path.replace(".jpg", "_pred.jpg"), out_img, [cv2.IMWRITE_JPEG_QUALITY, 80])
+        cv2.imwrite(oriimg_path.replace(".jpg", "_pred_mask.jpg"), msk*255, [cv2.IMWRITE_JPEG_QUALITY, 90])
 
 
 if __name__ == '__main__':
@@ -178,8 +184,8 @@ if __name__ == '__main__':
     argparse.add_argument('--option', type=str, default='evaluate', help='generate or evaluate')
     argparse.add_argument('--test-dir', type=str, default="../test/")
     argparse.add_argument('--device', type=str, default='cuda:0')
-    argparse.add_argument('--e4e-path', type=str, default='./pretrained_models/linenet.pt')
-    argparse.add_argument('--linenet-path', type=str, default='./pretrained_models/e4e_best_model.pth')
+    argparse.add_argument('--e4e-path', type=str, default='./pretrained_models/e4e_best_model.pth')
+    argparse.add_argument('--linenet-path', type=str, default='./pretrained_models/linenet.pt')
     argparse.add_argument('--facenet-path', type=str, default='./pretrained_models/facenet.pt')
     args = argparse.parse_args()
     device = args.device
@@ -193,7 +199,7 @@ if __name__ == '__main__':
     for root, dirs, files in os.walk(test_dir):
         for file_name in files:
             if file_name.endswith(".jpg") or file_name.endswith(".png"):
-                if "line" not in file_name and "stereo" not in file_name and "landmark" not in file_name:
+                if "line" not in file_name and "stereo" not in file_name and "landmark" not in file_name and "pred" not in file_name:
                     oriimg_paths.append(os.path.join(root, file_name))
     print("The number of images: :", len(oriimg_paths))
     oriimg_paths.sort()

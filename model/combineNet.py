@@ -37,7 +37,7 @@ class Model(nn.Module):
         self.trans = transforms.Compose([transforms.ToTensor(), transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))])
         self.parsenet = ParseNet(512, 512, 32, 64, 19, norm_type='bn', relu_type='LeakyReLU', ch_range=[32, 256])
 
-    def load_ckpt(self, line_ckpt, pSp_ckpt, shape_ckpt):
+    def load_ckpt(self, pSp_ckpt, line_ckpt, shape_ckpt):
         line = torch.load(line_ckpt, map_location=self.device)
         self.linenet.load_state_dict(line['state_dict'])
         self.psp.load_weights(pSp_ckpt)
@@ -114,11 +114,27 @@ class Model(nn.Module):
         ys, xs = np.mgrid[:ori_h, :ori_w]
         mesh_x = predflow_x.astype("float32") + xs.astype("float32")
         mesh_y = predflow_y.astype("float32") + ys.astype("float32")
-        img_mid = cv2.remap(img, mesh_x, mesh_y, cv2.INTER_LINEAR)
+        # img_mid = cv2.remap(img, mesh_x, mesh_y, cv2.INTER_LINEAR)
 
         facebs, landms = self.facedetector.detect(img)
         full_mask = np.zeros((ori_h, ori_w), dtype=np.float32)
         full_img = np.zeros(img.shape, dtype=np.uint8)
+
+        ori_img = np.copy(img)
+        out_msk = np.zeros_like(ori_img)
+        for i, (faceb, facial5points) in enumerate(zip(facebs, landms)):
+            facial5points = np.reshape(facial5points, (2, 5))
+            face, tfm_inv = utils_faces.warp_and_crop_face(img, facial5points, crop_size=(256, 256),
+                                                           reference_pts=self.reference_5pts)
+            tmp_mask = self.remove_bg(face)
+            tmp_mask = cv2.warpAffine(tmp_mask, tfm_inv, (ori_w, ori_h), flags=3)
+            black = self.black.astype(np.float32)
+            black = cv2.warpAffine(black, tfm_inv, (ori_w, ori_h), flags=3)
+            black = black[:, :, np.newaxis]
+            ori_img[np.where(tmp_mask > 0)] = black[np.where(tmp_mask > 0)] * 255
+            out_msk[np.where(tmp_mask > 0)] = 255
+        out_msk = cv2.remap(out_msk, mesh_x, mesh_y, cv2.INTER_LINEAR)
+        nw_img_mid = cv2.remap(ori_img, mesh_x, mesh_y, cv2.INTER_LINEAR)
 
         for i, (faceb, facial5points) in enumerate(zip(facebs, landms)):
             
@@ -153,11 +169,15 @@ class Model(nn.Module):
             mask = parse_mask - full_mask
             full_mask[np.where(parse_mask > 0)] = parse_mask[np.where(parse_mask > 0)]
             full_img[np.where(parse_mask > 0)] = tmp_img[np.where(parse_mask > 0)] * 255
+            out_msk[np.where(parse_mask > 0)] = 0
 
         full_mask = full_mask[:, :, np.newaxis]
-        ret_img = cv2.convertScaleAbs(img_mid * (1 - full_mask) + full_img * full_mask)
-        ret_img = ret_img[:, :, ::-1]
+        # print(min(full_mask.flatten()), max(full_mask.flatten()))
+        ret_img = cv2.convertScaleAbs(nw_img_mid * (1 - full_mask) + full_img * full_mask)
+        # ret_img = ret_img[:, :, ::-1]
+        out_msk = cv2.dilate(out_msk, self.kernel, iterations=3)
+        out_msk[np.where(out_msk > 0)] = 1
         if return_flow:
             return ret_img, f_mid
         else:
-            return ret_img 
+            return ret_img, out_msk 

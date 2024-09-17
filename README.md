@@ -54,6 +54,7 @@ The generated output is before post-process part, which means for each input xx.
 ### Step 3: Face detection to get the keypoints 
 
 Use any face detection tool to get face keypoints landmark for each faces in test images and save as file ```xxx_pred_landmark.json```, donot mind the face sequence cause it will be sorted during calculating.
+You may need [megvii face landmark detection](https://www.faceplusplus.com.cn/landmarks/) to get the same 81 landmarks as test dataset(except 'left_eye_pupil' and 'left_eye_pupil' landmark when using api).
 
 ### Step 4: Evaluate
 
