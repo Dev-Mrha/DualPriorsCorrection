@@ -110,23 +110,49 @@ def compute_ori2shape_face_line_metric(model, oriimg_paths):
         stereo_lmk_file = open(oriimg_path.replace(".jpg", "_stereo_landmark.json"))
         stereo_lmk = np.array(json.load(stereo_lmk_file), dtype="float32")
         # Get the landmarks from the [pred out]
-        out_lmk_file = open(oriimg_path.replace(".jpg", "_pred_landmark.json"))
-        out_lmk = np.array(json.load(out_lmk_file), dtype="float32")
-        # out_lmk = out_lmk / 0.75
-
-        stereo_lmk = sorted(stereo_lmk, key=lambda x: x[63][1])
-        out_lmk = sorted(out_lmk, key=lambda x: x[63][1])
-        stereo_lmk = np.array(stereo_lmk)
-        out_lmk = np.array(out_lmk)
+        # out_lmk_file = open(oriimg_path.replace(".jpg", "_pred_landmark.json"))
+        # out_lmk = np.array(json.load(out_lmk_file), dtype="float32")
+        # out_lmk = out_lmk / 0.75       
 
         # Compute the face metric
         ori_width, ori_height = ori_img.size
-        out_img, pred = get_img_flow(model, input)  # pred is flow_mid, only for lineAcc
+        out_img, f_mid, pred = get_img_flow(model, input)  # pred is flow_mid, only for lineAcc
+        cv2.imwrite(oriimg_path.replace('.jpg','_pred.jpg'), out_img)
+
         predflow_x, predflow_y = pred[:, :, 0], pred[:, :, 1]
         scale_x = ori_width / predflow_x.shape[1]
         scale_y = ori_height / predflow_x.shape[0]
         predflow_x = cv2.resize(predflow_x, (ori_width, ori_height)) * scale_x
         predflow_y = cv2.resize(predflow_y, (ori_width, ori_height)) * scale_y
+
+        # Get the landmarks from the [source image]
+        ori_lmk_file = open(oriimg_path.replace(".jpg", "_landmark.json"))
+        ori_lmk = np.array(json.load(ori_lmk_file), dtype="float32")
+
+        # print(ori_lmk.shape)
+        # Get the landmarks from the the pred out
+        out_lmk = np.zeros_like(ori_lmk)
+        for i in range(ori_lmk.shape[0]):
+            for j in range(ori_lmk.shape[1]):
+                x = ori_lmk[i, j, 0]
+                y = ori_lmk[i, j, 1]
+                if y < predflow_y.shape[0] and x < predflow_y.shape[1]:
+                    out_lmk[i, j, 0] = x - predflow_x[int(y), int(x)]
+                    out_lmk[i, j, 1] = y - predflow_y[int(y), int(x)]
+                else:
+                    out_lmk[i, j, 0] = x
+                    out_lmk[i, j, 1] = y
+        
+        # stereo_lmk = sorted(stereo_lmk, key=lambda x: x[63][1])
+        # out_lmk = sorted(out_lmk, key=lambda x: x[63][1])
+        # stereo_lmk = np.array(stereo_lmk)
+        # out_lmk = np.array(out_lmk)
+
+        # predflow_x, predflow_y = pred[:, :, 0], pred[:, :, 1]
+        # scale_x = ori_width / predflow_x.shape[1]
+        # scale_y = ori_height / predflow_x.shape[0]
+        # predflow_x = cv2.resize(predflow_x, (ori_width, ori_height)) * scale_x
+        # predflow_y = cv2.resize(predflow_y, (ori_width, ori_height)) * scale_y
         # Get the line from the [gt image]
         gt_line_file = oriimg_path.replace(".jpg", "_line_lines.json")
         lines = json.load(open(gt_line_file))

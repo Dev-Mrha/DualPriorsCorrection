@@ -36,6 +36,12 @@ class Model(nn.Module):
         self.kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (5, 5))
         self.trans = transforms.Compose([transforms.ToTensor(), transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))])
         self.parsenet = ParseNet(512, 512, 32, 64, 19, norm_type='bn', relu_type='LeakyReLU', ch_range=[32, 256])
+        xx = torch.arange(0, 256).view(1,-1).repeat(256,1)
+        yy = torch.arange(0, 256).view(-1,1).repeat(1,256)
+        xx = xx.view(1,1,256,256).repeat(1,1,1,1)
+        yy = yy.view(1, 1, 256, 256).repeat(1, 1, 1, 1)
+        self.grid = torch.cat((xx,yy), dim=1).float()
+        self.grid = self.grid.permute(0,2,3,1).to(self.device)
 
     def load_ckpt(self, pSp_ckpt, line_ckpt, shape_ckpt):
         line = torch.load(line_ckpt, map_location=self.device)
@@ -95,6 +101,29 @@ class Model(nn.Module):
         img_np[img_np > 0] = 1
         img_np = cv2.resize(img_np, (256,256))
         return img_np
+    
+    def combine_flow(self, flow, face_flow, bbox, move_x, move_y):
+        face_flow = (face_flow + 1.0) * 255 / 2.0
+        face_flow = face_flow - self.grid
+        height, width = int(bbox[2]) - int(bbox[0]), int(bbox[3]) - int(bbox[1])
+        face_flow[:, :, :, 0] = face_flow[:, :, :, 0].clone() / 256 * width
+        face_flow[:, :, :, 1] = face_flow[:, :, :, 1].clone() / 256 * height
+        face_flow = F.interpolate(face_flow.permute(0, 3, 1, 2), (width, height)).permute(0, 2, 3, 1)
+        face_flow = face_flow.squeeze()
+        g_face_flow = np.zeros_like(flow)
+        for i in range(width):
+            for j in range(height):
+                u, v = int(i + face_flow[i][j][0] + bbox[1]+move_x), int(j + face_flow[i][j][1] + bbox[0]+move_y)
+                if 0 < u and u < 384 and 0 < v and v < 512:
+                    g_face_flow[0][u][v][0] = face_flow[i][j][0]
+                    g_face_flow[0][u][v][1] = face_flow[i][j][1]
+        i_indices, j_indices = np.meshgrid(np.arange(384), np.arange(512), indexing='ij')
+        u_indices = (i_indices + flow[0, :, :, 0]).astype(int)
+        v_indices = (j_indices + flow[0, :, :, 1]).astype(int)
+        mask = (u_indices > 0) & (u_indices < 384) & (v_indices > 0) & (v_indices < 512)
+        flow[0][mask] += g_face_flow[0][u_indices[mask], v_indices[mask]]
+        return flow
+
 
     def forward(self, img, return_flow=False):
         ori_w, ori_h = img.size
@@ -122,6 +151,10 @@ class Model(nn.Module):
 
         ori_img = np.copy(img)
         out_msk = np.zeros_like(ori_img)
+
+        final_flow = f_mid.copy()
+        final_flow = np.stack([final_flow])
+
         for i, (faceb, facial5points) in enumerate(zip(facebs, landms)):
             facial5points = np.reshape(facial5points, (2, 5))
             face, tfm_inv = utils_faces.warp_and_crop_face(img, facial5points, crop_size=(256, 256),
@@ -151,7 +184,10 @@ class Model(nn.Module):
 
             e4eimg, features = self.psp(face)
             flow_face = self.shapenet(face, features)
+
             flow_face = flow_face.permute(0, 2, 3, 1)
+            if return_flow:
+                final_flow = self.combine_flow(final_flow, flow_face, faceb, mat[0][2], mat[1][2])
             out_face = F.grid_sample(face, flow_face, mode='bilinear', align_corners=True)
             out_face = out_face.squeeze().permute(1, 2, 0).flip(2)
             out_face = out_face.cpu().numpy()
@@ -172,12 +208,10 @@ class Model(nn.Module):
             out_msk[np.where(parse_mask > 0)] = 0
 
         full_mask = full_mask[:, :, np.newaxis]
-        # print(min(full_mask.flatten()), max(full_mask.flatten()))
         ret_img = cv2.convertScaleAbs(nw_img_mid * (1 - full_mask) + full_img * full_mask)
-        # ret_img = ret_img[:, :, ::-1]
         out_msk = cv2.dilate(out_msk, self.kernel, iterations=3)
         out_msk[np.where(out_msk > 0)] = 1
         if return_flow:
-            return ret_img, f_mid
+            return ret_img, f_mid, final_flow[0]
         else:
             return ret_img, out_msk 
