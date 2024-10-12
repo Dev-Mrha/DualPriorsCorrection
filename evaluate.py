@@ -62,35 +62,6 @@ def compute_line_slope_difference(pred_line, gt_k):  # line
     return score
 
 
-transform = transforms.Compose([
-    transforms.Resize((384, 512)),
-    transforms.ToTensor()])
-
-tf_to = transforms.Compose([
-    transforms.ToTensor()])
-
-def landmark_loss(preds, gts):
-    people_num = gts.shape[0]
-    points_num = gts.shape[1]
-    landmark_losses = []
-    preds = preds.astype(np.float32)
-    gts = gts.astype(np.float32)
-    for people_index in range(people_num):  # people_num
-        # the index 63 of lmk is the center point of the face, that is, the tip of the nose
-        pred_center = preds[people_index, 63, :]
-        pred = preds[people_index, :, :]
-        pred = pred - pred_center[None, :]
-        gt_center = gts[people_index, 63, :]
-        gt = gts[people_index, :, :]
-        gt = gt - gt_center[None, :]
-
-        ldmk_loss = np.sqrt((pred - gt) ** 2)
-
-    landmark_losses.append(ldmk_loss)
-
-    return np.mean(landmark_losses)
-
-
 def compute_ori2shape_face_line_metric(model, oriimg_paths):
     line_all_sum_pred = []
     face_all_sum_pred = []
@@ -175,12 +146,13 @@ def compute_ori2shape_face_line_metric(model, oriimg_paths):
         line_all_sum_pred.append(np.mean(line_pred_ori2shape_sum))
         
         face_pred_sim = compute_cosin_similarity(out_lmk, stereo_lmk)
-        ldmk_loss = landmark_loss(out_lmk, stereo_lmk)
         face_all_sum_pred.append(face_pred_sim)
-        ldmk_loss_all.append(ldmk_loss)
         stereo_lmk_file.close()
+        ori_lmk_file.close()
+        ori_line_file.close()
+        gt_line_file.close()
 
-    return np.mean(line_all_sum_pred) * 100, np.mean(face_all_sum_pred) * 100, np.mean(ldmk_loss_all)
+    return np.mean(line_all_sum_pred) * 100, np.mean(face_all_sum_pred) * 100
 
 
 def generate_out(model, img_pths):
