@@ -194,5 +194,5 @@ if __name__ == '__main__':
         generate_out(mdl, oriimg_paths)
     if args.option == 'evaluate':
         print("Evaluate the output images")
-        line_score, face_score, ldmk_loss = compute_ori2shape_face_line_metric(mdl, oriimg_paths)
-        print("Line_score = {:.4f}, Face_score = {:.4f}, ldmk_loss = {:.4f} ".format(line_score, face_score, ldmk_loss))
+        line_score, face_score = compute_ori2shape_face_line_metric(mdl, oriimg_paths)
+        print("Line_score = {:.4f}, Face_score = {:.4f} ".format(line_score, face_score))
