@@ -105,10 +105,7 @@ class Model(nn.Module):
     def combine_flow(self, flow, face_flow, bbox, move_x, move_y):
         face_flow = (face_flow + 1.0) * 255 / 2.0
         face_flow = face_flow - self.grid
-        # face_flow = face_flow.squeeze()
-        # print(flow.shape, face_flow.shape)
         height, width = int(bbox[2]) - int(bbox[0]), int(bbox[3]) - int(bbox[1])
-        # print(height, width)
         face_flow[:, :, :, 0] = face_flow[:, :, :, 0].clone() / 256 * width
         face_flow[:, :, :, 1] = face_flow[:, :, :, 1].clone() / 256 * height
         face_flow = F.interpolate(face_flow.permute(0, 3, 1, 2), (width, height)).permute(0, 2, 3, 1)
@@ -121,18 +118,9 @@ class Model(nn.Module):
                 if 0 < u and u < 384 and 0 < v and v < 512:
                     g_face_flow[0][u][v][0] = face_flow[i][j][0]
                     g_face_flow[0][u][v][1] = face_flow[i][j][1]
-        # for i in range(384):
-        #     for j in range(512):
-        #         u, v = int(i + flow[0][i][j][0]), int(j + flow[0][i][j][1])
-        #         if 0 < u and u < 384 and 0 < v and v < 512:
-        #             flow[0][i][j][0] += g_face_flow[0][u][v][0]
-        #             flow[0][i][j][1] += g_face_flow[0][u][v][1]
-        # Vectorized approach for the second loop
         i_indices, j_indices = np.meshgrid(np.arange(384), np.arange(512), indexing='ij')
         u_indices = (i_indices + flow[0, :, :, 0]).astype(int)
         v_indices = (j_indices + flow[0, :, :, 1]).astype(int)
-        #u_indices = np.arange(384) + flow[0, :, :, 0].astype(int)
-        #v_indices = np.arange(512) + flow[0, :, :, 1].astype(int)
 
         # Create a mask for valid indices
         mask = (u_indices > 0) & (u_indices < 384) & (v_indices > 0) & (v_indices < 512)
@@ -203,7 +191,8 @@ class Model(nn.Module):
             flow_face = self.shapenet(face, features)
 
             flow_face = flow_face.permute(0, 2, 3, 1)
-            final_flow = self.combine_flow(final_flow, flow_face, faceb, mat[0][2], mat[1][2])
+            if return_flow:
+                final_flow = self.combine_flow(final_flow, flow_face, faceb, mat[0][2], mat[1][2])
             out_face = F.grid_sample(face, flow_face, mode='bilinear', align_corners=True)
             out_face = out_face.squeeze().permute(1, 2, 0).flip(2)
             out_face = out_face.cpu().numpy()
