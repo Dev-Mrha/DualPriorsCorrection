@@ -15,7 +15,7 @@ eps = 1e-6
 
 
 def compute_cosin_similarity(preds, gts):  # shape
-    people_num = min(preds.shape[0], gts.shape[0])
+    people_num = gts.shape[0]
     points_num = gts.shape[1]
     similarity_list = []
     preds = preds.astype(np.float32)
@@ -28,19 +28,15 @@ def compute_cosin_similarity(preds, gts):  # shape
         gt_center = gts[people_index, 63, :]
         gt = gts[people_index, :, :]
         gt = gt - gt_center[None, :]
-
         dot = np.sum((pred * gt), axis=1)
         pred = np.sqrt(np.sum(pred * pred, axis=1))
         gt = np.sqrt(np.sum(gt * gt, axis=1))
-
         similarity_list_tmp = []
         for i in range(points_num):
             if i != 63:
                 similarity = (dot[i] / (pred[i] * gt[i] + eps))
                 similarity_list_tmp.append(similarity)
-
         similarity_list.append(np.mean(similarity_list_tmp))
-
     return np.mean(similarity_list)
 
 def get_img_flow(model, img, rt=True):
@@ -74,7 +70,7 @@ tf_to = transforms.Compose([
     transforms.ToTensor()])
 
 def landmark_loss(preds, gts):
-    people_num = min(preds.shape[0], gts.shape[0])
+    people_num = gts.shape[0]
     points_num = gts.shape[1]
     landmark_losses = []
     preds = preds.astype(np.float32)
@@ -90,7 +86,7 @@ def landmark_loss(preds, gts):
 
         ldmk_loss = np.sqrt((pred - gt) ** 2)
 
-        landmark_losses.append(ldmk_loss)
+    landmark_losses.append(ldmk_loss)
 
     return np.mean(landmark_losses)
 
@@ -112,24 +108,22 @@ def compute_ori2shape_face_line_metric(model, oriimg_paths):
         # Get the landmarks from the [pred out]
         # out_lmk_file = open(oriimg_path.replace(".jpg", "_pred_landmark.json"))
         # out_lmk = np.array(json.load(out_lmk_file), dtype="float32")
-        # out_lmk = out_lmk / 0.75       
-
+        
         # Compute the face metric
         ori_width, ori_height = ori_img.size
         out_img, f_mid, pred = get_img_flow(model, input)  # pred is flow_mid, only for lineAcc
-        cv2.imwrite(oriimg_path.replace('.jpg','_pred.jpg'), out_img)
+        cv2.imwrite(oriimg_path.replace('.jpg','_pred.jpg'), out_img[:,:,::-1])
 
         predflow_x, predflow_y = pred[:, :, 0], pred[:, :, 1]
         scale_x = ori_width / predflow_x.shape[1]
         scale_y = ori_height / predflow_x.shape[0]
         predflow_x = cv2.resize(predflow_x, (ori_width, ori_height)) * scale_x
         predflow_y = cv2.resize(predflow_y, (ori_width, ori_height)) * scale_y
-
+        
         # Get the landmarks from the [source image]
         ori_lmk_file = open(oriimg_path.replace(".jpg", "_landmark.json"))
         ori_lmk = np.array(json.load(ori_lmk_file), dtype="float32")
 
-        # print(ori_lmk.shape)
         # Get the landmarks from the the pred out
         out_lmk = np.zeros_like(ori_lmk)
         for i in range(ori_lmk.shape[0]):
@@ -143,16 +137,12 @@ def compute_ori2shape_face_line_metric(model, oriimg_paths):
                     out_lmk[i, j, 0] = x
                     out_lmk[i, j, 1] = y
         
-        # stereo_lmk = sorted(stereo_lmk, key=lambda x: x[63][1])
-        # out_lmk = sorted(out_lmk, key=lambda x: x[63][1])
-        # stereo_lmk = np.array(stereo_lmk)
-        # out_lmk = np.array(out_lmk)
-
-        # predflow_x, predflow_y = pred[:, :, 0], pred[:, :, 1]
-        # scale_x = ori_width / predflow_x.shape[1]
-        # scale_y = ori_height / predflow_x.shape[0]
-        # predflow_x = cv2.resize(predflow_x, (ori_width, ori_height)) * scale_x
-        # predflow_y = cv2.resize(predflow_y, (ori_width, ori_height)) * scale_y
+        # Sort the landmarks by face center
+        stereo_lmk = sorted(stereo_lmk, key=lambda x: x[63][1])
+        out_lmk = sorted(out_lmk, key=lambda x: x[63][1])
+        stereo_lmk = np.array(stereo_lmk)
+        out_lmk = np.array(out_lmk)
+        
         # Get the line from the [gt image]
         gt_line_file = oriimg_path.replace(".jpg", "_line_lines.json")
         lines = json.load(open(gt_line_file))
@@ -160,7 +150,7 @@ def compute_ori2shape_face_line_metric(model, oriimg_paths):
         # Get the line from the [source image]
         ori_line_file = oriimg_path.replace(".jpg", "_lines.json")
         ori_lines = json.load(open(ori_line_file))
-
+        
         # Get the line from the pred out
         pred_ori2shape_lines = []
         for index, ori_line in enumerate(ori_lines):
@@ -183,7 +173,7 @@ def compute_ori2shape_face_line_metric(model, oriimg_paths):
             pred_ori2shape_score = compute_line_slope_difference(pred_ori2shape, gt_k)
             line_pred_ori2shape_sum.append(pred_ori2shape_score)
         line_all_sum_pred.append(np.mean(line_pred_ori2shape_sum))
-
+        
         face_pred_sim = compute_cosin_similarity(out_lmk, stereo_lmk)
         ldmk_loss = landmark_loss(out_lmk, stereo_lmk)
         face_all_sum_pred.append(face_pred_sim)
@@ -199,8 +189,6 @@ def generate_out(model, img_pths):
         input = ori_img.copy() 
         out_img, msk = get_img_flow(model, input, False)  # image and mask
         out_img = cv2.cvtColor(out_img, cv2.COLOR_RGB2BGR)
-        out_img = cv2.resize(out_img, (0,0), fx=0.75, fy=0.75)
-        msk = cv2.resize(msk, (0,0), fx=0.75, fy=0.75)
         cv2.imwrite(oriimg_path.replace(".jpg", "_pred.jpg"), out_img, [cv2.IMWRITE_JPEG_QUALITY, 80])
         cv2.imwrite(oriimg_path.replace(".jpg", "_pred_mask.jpg"), msk*255, [cv2.IMWRITE_JPEG_QUALITY, 90])
 
