@@ -1,23 +1,12 @@
 <div align="center">
 <h1>Combining Generative and Geometry Priors for Wide-Angle Portrait Correction</h1>
 
-<h4 align="center">Lan Yao<sup>1</sup>, Chaofeng Chen<sup>2</sup>, Xiaoming Li<sup>1</sup>, Zifei Yan<sup>1</sup>, Wangmeng Zuo<sup>1,3</sup></h4>
-
-<div>
-    <sup>1</sup> Harbin Institute of Technology,
-    <sup>2</sup> Nanyang Technological University,
-    <sup>3</sup> Pazhou Lab, Huangpu
-</div>
-
-<!-- [Paper]() | [Project Page]() -->
-
+<h4 align="center">Lan Yao, Chaofeng Chen, Xiaoming Li, Zifei Yan, Wangmeng Zuo</h4>
 
 <p><B>we introduce a framework that leverages generative and geometry priors to rectify wide-angle distortions in faces and  backgrounds.
 Experiments demonstrate that our approach outperforms previous methods by a large margin, excelling not only in quantitative measures such as line straightness and shape consistency metrics but also in terms of perceptual visual quality</B></p>
 
 <img src="./figures/intro.png" width="800px">
-
-<!-- <p align="justify">Given a wide-angle image, LineCNet generate the flow to correct distortion in the background for the whole image, while FaceCNet deal with each faces crop and align by face alignment. In FaceCNet, the face first inverse into StyleGAN  latent space by e4e encoder, and a U-Net framework combining the multi-scale features from StyleGAN generate the correction flow. After seperate correction, a post-process is done for face fusion. </p> -->
 
 <p align="justify">Given a wide-angle image, LineCNet and FaceCNet deal with the correction in background and face region seperatly, then face fusion is done by a post-process. </p>
 
@@ -31,6 +20,23 @@ Experiments demonstrate that our approach outperforms previous methods by a larg
 ## Installation
 
 All dependencies for defining the environment are provided in environment.yaml.
+```
+conda env create -f environment.yaml
+conda actviate Dualpriors
+```
+
+## Dataset Preparation
+
+**Public Dataset:**
+
+[public dataset](https://pan.baidu.com/share/init?surl=MvwulIIs2CowfQ-8d0gcsQ&pwd=5pe5) released by work [Practical Wide-Angle Portraits Correction with Deep Structured Models](https://github.com/TanJing94/Deep_Portraits_Correction?tab=readme-ov-file)
+
+**Generated distorted face by FFHQ and CelebA-HQ:**
+
+You can generate by code below:
+```
+python utils/gen_data.py
+```
 
 ## Evaluate
 
@@ -41,25 +47,49 @@ Because of our post process, ShapeAcc and Landmark Distance cannot directly gene
 
 ### Step 1: download the dataset
 
-[public dataset](https://pan.baidu.com/share/init?surl=MvwulIIs2CowfQ-8d0gcsQ&pwd=5pe5) released by work [Practical Wide-Angle Portraits Correction with Deep Structured Models](https://github.com/TanJing94/Deep_Portraits_Correction?tab=readme-ov-file)
+download the **test** dataset and put in ```../test/```.
 
 ### Step 2: generate the output of test dataset
 
 ```
-python evaluate.py --option generate --test-dir ../test/ --device cuda:0 --e4e-path ./pretrained_models/e4e_best_model.pth --linenet-path ./pretrained_models/linenet.pt --facenet-path ./pretrained_models/facenet.pt
+python evaluate.py \ 
+--option generate \ 
+--test-dir ../test/ \ 
+--device cuda:0 \ 
+--e4e-path ./pretrained_models/e4e_best_model.pth \ 
+--linenet-path ./pretrained_models/linenet.pt \ 
+--facenet-path ./pretrained_models/facenet.pt
 ```
 
 The generated output is before post-process part, which means for each input xx.jpg, you now have a xx_out.jpg and xx_mask.jpg that you may need a image inpainting alogorithm to generate the final output. You can use [lama](https://github.com/advimman/lama) for this part. 
 
 ### Step 3: Evaluate
 
-Cause in our method, when we generate the output, we do not have a whole flow for the entire image. So when we calculate the evaluation metrics, it extraly cost to get the final combined flow, which means this evaluation need much longer time than step 3 (generate output).
+
+Due to our method's approach, we don't generate a complete flow for the entire image during output creation. Consequently, calculating evaluation metrics requires additional processing to obtain the final combined flow, which significantly increases evaluation time compared to the output generation step.
+
+To run the evaluation:
 
 ```
-python evaluate.py --option evaluate --test-dir ../test/ --device cuda:0 --e4e-path ./pretrained_models/e4e_best_model.pth --linenet-path ./pretrained_models/linenet.pt --facenet-path ./pretrained_models/facenet.pt
+python evaluate.py \ 
+--option evaluate \ 
+--test-dir ../test/ \ 
+--device cuda:0 \ 
+--e4e-path ./pretrained_models/e4e_best_model.pth \ 
+--linenet-path ./pretrained_models/linenet.pt \ 
+--facenet-path ./pretrained_models/facenet.pt
 ```
 
-As we do not get the output image with the combined flow, so another way to evaluate the face metrics is after generating the output, use face landmark detection method to get the corresponding 81 face landmarks for each output and save as json files for directly calculate the metrics, which seems more accurate. (You may need [megvii face landmark detection](https://www.faceplusplus.com.cn/landmarks/) to get the same 81 landmarks as test dataset(remove 'left_eye_pupil' and 'left_eye_pupil' landmark when using api))
+#### Alternative evaluation method:
+
+1. Generate the output images (after post-process) .
+2. Use a face landmark detection method to obtain 81 corresponding face landmarks for each output.
+3. Save these landmarks as JSON files.
+4. Use these JSON files to directly calculate the metrics.
+
+This method bypasses the need for combined flow calculation and may yield more accurate results.
+
+**Note:** To ensure compatibility with the test dataset, we recommend using the [Megvii Face++ Landmark Detection API](https://www.faceplusplus.com.cn/landmarks/). When using this API, remember to exclude the 'left_eye_pupil' and 'right_eye_pupil' landmarks to match the 81 landmarks in the test dataset.
 
 ## Training
 Data for finetune e4e encoder:
@@ -67,14 +97,14 @@ Data for finetune e4e encoder:
 
 Training Data for FaceCNet:
 - generated distorted face data using FFHQ and CelebA-HQ
-- cropped face from [public datset](#step-1:-download-the-dataset)
+- cropped face from public datset
 
 ```
 python train_facecnet.py
 ```
 
 Training Data for lineCNet:
-- [public dataset](#step-1:-download-the-dataset)
+- [public dataset](#Dataset-Preparation)
 
 ```
 python train_linecnet.py
