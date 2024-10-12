@@ -33,9 +33,14 @@ conda actviate Dualpriors
 
 **Generated distorted face by FFHQ and CelebA-HQ:**
 
-You can generate by code below:
+You can generate by code like below:
+first, generate the distorting flow:
 ```
-python utils/gen_data.py
+python utils/gen_data.py --option flow --dir ./path_to_save_flow
+```
+then, generate the distorted face:
+```
+python utils/gen_data.py --option image --dir ./FFHQ
 ```
 
 ## Evaluate
