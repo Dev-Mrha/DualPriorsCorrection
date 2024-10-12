@@ -83,7 +83,9 @@ def compute_ori2shape_face_line_metric(model, oriimg_paths):
         # Compute the face metric
         ori_width, ori_height = ori_img.size
         out_img, f_mid, pred = get_img_flow(model, input)  # pred is flow_mid, only for lineAcc
-        cv2.imwrite(oriimg_path.replace('.jpg','_pred.jpg'), out_img[:,:,::-1])
+
+        # Optional output the pred image without mask, you need to run generate option to get the pred image and mask
+        # cv2.imwrite(oriimg_path.replace('.jpg','_pred.jpg'), out_img[:,:,::-1])
 
         predflow_x, predflow_y = pred[:, :, 0], pred[:, :, 1]
         scale_x = ori_width / predflow_x.shape[1]
