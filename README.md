@@ -106,13 +106,32 @@ Training Data for FaceCNet:
 
 ```
 python train_facecnet.py
+--dataset_type facecnet_data \
+--exp_dir experiment/ \
+--start_from_latent_avg \
+--val_interval 40000 \
+--save_interval 20000 \
+--max_steps 200000 \
+--image_interval 1000 \
+--stylegan_size 512 \
+--stylegan_weights pretrained_models/stylegan2.pt \
+--workers 4 \
+--batch_size 4 \
+--test_batch_size 8 \
+--test_workers 4 \
+--checkpoint_path pretrained_models/e4e_best_model.pt \
 ```
 
 Training Data for lineCNet:
 - [public dataset](#Dataset-Preparation)
 
 ```
-python train_linecnet.py
+python train_linenet.py \
+--dataset_type linenet_data \
+--exp_dir experiment/ \
+--val_interval 20000 \
+--batch_size 4 \
+--max_steps 200000
 ```
 
 
